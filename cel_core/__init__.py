@@ -1,6 +1,8 @@
 """Core 2D cellular automata engine and analytical query modules."""
 
+from cel_core.engine import CycleTracker, SimulationEngine
 from cel_core.grid import MOORE_KERNEL, VON_NEUMANN_KERNEL, get_kernel, neighbor_count, pad
+from cel_core.hashing import state_key
 from cel_core.rules import BaseRule, build_rule, make_rng_state
 from cel_core.spec import (
     SPEC_ADAPTER,
@@ -36,6 +38,7 @@ __all__ = [
     "BaseAutomatonSpec",
     "BaseRule",
     "BoundaryCondition",
+    "CycleTracker",
     "Direction",
     "ForestFireSpec",
     "GenerationsSpec",
@@ -48,6 +51,7 @@ __all__ = [
     "QueryResultQ4",
     "QueryResultQ5",
     "RuleSpec",
+    "SimulationEngine",
     "WorldState",
     "build_rule",
     "get_kernel",
@@ -56,4 +60,5 @@ __all__ = [
     "neighbor_count",
     "pad",
     "parse_spec",
+    "state_key",
 ]
