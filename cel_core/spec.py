@@ -193,6 +193,7 @@ class LangtonSpec(BaseAutomatonSpec):
         default=Direction.N,
         validation_alias=AliasChoices("default_direction", "initial_direction", "direction"),
     )
+    border_policy: Literal["wrap", "halt", "bounce"] = "wrap"
     num_states: int = 2
     state_names: list[str] = Field(default_factory=lambda: ["WHITE", "BLACK"])
     neighborhood: Neighborhood = Neighborhood.VON_NEUMANN
