@@ -97,6 +97,11 @@ class SimulationEngine:
         return self._current.copy()
 
     @property
+    def initial_state(self) -> WorldState:
+        """Copy of the state the engine was created with."""
+        return self._initial.copy()
+
+    @property
     def current_step(self) -> int:
         return self._current.step
 

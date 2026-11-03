@@ -3,6 +3,7 @@
 from cel_core.engine import CycleTracker, SimulationEngine
 from cel_core.grid import MOORE_KERNEL, VON_NEUMANN_KERNEL, get_kernel, neighbor_count, pad
 from cel_core.hashing import state_key
+from cel_core.oracle import AutomataOracle
 from cel_core.rules import BaseRule, build_rule, make_rng_state
 from cel_core.spec import (
     SPEC_ADAPTER,
@@ -34,6 +35,7 @@ __all__ = [
     "SPEC_ADAPTER",
     "VON_NEUMANN_KERNEL",
     "Agent",
+    "AutomataOracle",
     "AutomatonSpec",
     "BaseAutomatonSpec",
     "BaseRule",
