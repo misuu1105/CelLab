@@ -1,37 +1,76 @@
 import numpy as np
 import json
 import os
+from cel_core import WorldState, parse_spec, BaseAutomatonSpec
 
-def save_simulation(world_state_dict:dict, base_filename: str):
+def save_simulation(state:WorldState, spec:BaseAutomatonSpec, base_filename: str):
     """
         Funcția asta face un fel de 'fout'.
         Primeste un dicționar cu toate variabilele (ca un struct din C++) și un nume de fisier.
         Salvam matricea in format comprimat (.npz) si restul datelor in format text (.json).
+
+        Salvează starea și specificația automatului:
+    - Matricea (grid) merge comprimată în .npz
+    - Restul stării + specificația regulilor merg în .json
     """
-    #extragem matricea din dictionar
-    grid=world_state_dict.pop('grid')
+
+    state_dict=state.to_dict()
+
+    #extragem matricea/grila din dictionar si o salvam separat in format binar comprimat
+    grid=state_dict.pop('grid',state.grid)
     #salvam matricea pe disc folosind numpy
-    npz_filename=base_filename+'.npz'
+    npz_filename=f"{base_filename}.npz"
     np.savez_compressed(npz_filename, grid=grid)
-    #salvam restul datelor intr-un json
-    json_filename=base_filename+'.json'
+
+    #serializam specificatia folosind direct json de la pydantic(converteste automat seturile la model_dump_json)
+    if hasattr(spec, "model_dump_json"):
+        spec_data=json.loads(spec.model_dump_json())
+    elif hasattr(spec, "model_dump_"):
+        spec_data=spec.model_dump(mode="json")
+    else:
+        spec_data=spec
+
+    payload={
+        "spec":spec_data,
+        "state":state_dict
+    }
+
+    #functie de conversie pt orice tip necuscut din json standard
+    def default_serializer(obj):
+        if isinstance(obj, (set, frozenset)):
+            return list(obj)
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if hasattr(obj, "to_dict"):
+            return obj.to_dict()
+        if hasattr(obj, "__dict__"):
+            return obj.__dict__
+        return str(obj)
+
+
+    #salvam restul metadatelor intr-un json
+    json_filename=f"{base_filename}.json"
     with open(json_filename, 'w', encoding='utf-8') as f:
         #json.dump transforma dictionarul python in text si il scrie in fisierul f
-        json.dump(world_state_dict, f, indent=4)
+        json.dump(payload, f, indent=4, default=default_serializer)
 
-    print(f"Am salvat simularea in {npz_filename} si {json_filename}")
-
-    #punem grila/matricea inapoi in dictionar in caz de
-    world_state_dict['grid']=grid
+    print(f"Simulare salvată cu succes în {base_filename}.json și {base_filename}.npz")
 
 
-def load_simulation(base_filename: str)->dict:
+def load_simulation(base_filename: str):
     """
         Funcția asta face un fel de 'ifstream fin'.
         Citește JSON-ul și NPZ-ul și reconstruiește dicționarul.
+
+        Încarcă fișierele și reconstruiește obiectele WorldState și BaseAutomatonSpec.
+    Returnează (state, spec) sau None dacă fișierele nu există.
     """
-    json_filename=base_filename+'.json'
-    npz_filename=base_filename+'.npz'
+    json_filename=f"{base_filename}.json"
+    npz_filename=f"{base_filename}.npz"
 
     if not os.path.exists(json_filename) or not os.path.exists(npz_filename):
         print("Eroare: Fisierele nu exista!")
@@ -39,38 +78,17 @@ def load_simulation(base_filename: str)->dict:
 
     #citim partea de text (step,reguli)
     with open(json_filename, 'r', encoding='utf-8') as f:
-        world_state_dict = json.load(f)
+        data = json.load(f)
 
     #citim matricea
     loaded_npz=np.load(npz_filename)
     grid=loaded_npz['grid']
+
+    #reconstruim specif regulii
+    spec=parse_spec(data["spec"])
     #punem matricea inapoi in dictionar
-    world_state_dict['grid']=grid
+    state_dict=data["state"]
+    state_dict["grid"]=grid
+    state=WorldState.from_dict(state_dict)
 
-    print(f"Am incarcat simularea de la pasul:{world_state_dict.get('step')}")
-
-    return world_state_dict
-
-
-if __name__=='__main__':
-    #facem o matrice 10x10 de proba
-    test_grid=np.zeros((10,10),dtype=np.uint8)
-    test_grid[5][5]=1
-
-    test_world={
-        'grid':test_grid,
-        'step':42,
-        'spec':'{"kind","life_like","birth":[3],"survive":[2,3]}',
-        'seed':12345
-    }
-
-    # Salvăm
-    print("Testam Salvarea...")
-    save_simulation(test_world, "test_save")
-
-    # Încărcăm
-    print("\nTestam Incarcarea...")
-    loaded_world = load_simulation("test_save")
-
-    # Afisam ce am incarcat
-    print("Matricea incarcata (valoarea de la 5,5 trebuie sa fie 1):", loaded_world['grid'][5][5])
+    return state,spec
