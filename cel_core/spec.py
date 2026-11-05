@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal, Union, Iterable
 
 from pydantic import (
     AliasChoices,
@@ -38,7 +38,7 @@ def _validate_neighbor_counts(
     max_n = max_neighbors_for(neighborhood)
     normalized: set[int] = set()
     for c in counts:
-        if isinstance(c, bool) or not isinstance(c, int):
+        if isinstance(c, bool) or not isinstance(c, int): # bool is an instance of int
             raise ValueError(f"{field_name} elements must be integers, got {c!r}")
         if c < 0 or c > max_n:
             raise ValueError(
@@ -111,7 +111,13 @@ class BaseAutomatonSpec(BaseModel):
 
 
 class LifeLikeSpec(BaseAutomatonSpec):
-    """2-state outer-totalistic Life-like cellular automaton specification (B/S)."""
+    """2-state outer-totalistic Life-like cellular automaton specification (B/S).
+
+    States:
+    - 0 (DEAD): Transitions to 1 if the number of state-1 neighbors is in `birth`.
+    - 1 (ALIVE): Remains 1 if the number of state-1 neighbors is in `survival`;
+      otherwise transitions to 0.
+    """
 
     kind: Literal["lifelike"] = "lifelike"
     name: str = "Conway's Game of Life"
@@ -122,7 +128,7 @@ class LifeLikeSpec(BaseAutomatonSpec):
 
     @field_validator("birth", "survival", mode="before")
     @classmethod
-    def _coerce_count_set(cls, v: Any) -> set[int]:
+    def _coerce_count_set(cls, v: Iterable) -> set[int]:
         if isinstance(v, (set, frozenset, list, tuple)):
             result: set[int] = set()
             for item in v:
@@ -143,7 +149,15 @@ class LifeLikeSpec(BaseAutomatonSpec):
 
 
 class GenerationsSpec(BaseAutomatonSpec):
-    """Multi-state Generations automaton specification (e.g., Brian's Brain)."""
+    """Multi-state Generations automaton specification (B/S/C, e.g., Brian's Brain).
+
+    States (for `num_states` = C >= 3):
+    - 0 (OFF): Transitions to 1 if the number of state-1 neighbors is in `birth`.
+    - 1 (FIRING): Remains 1 if the number of state-1 neighbors is in `survival`;
+      otherwise transitions to 2.
+    - 2..C-1 (DYING): Refractory states that increment by 1 each step and wrap
+      back to 0 after C-1. Refractory cells do not count toward neighbor totals.
+    """
 
     kind: Literal["generations"] = "generations"
     name: str = "Brian's Brain"
@@ -154,7 +168,7 @@ class GenerationsSpec(BaseAutomatonSpec):
 
     @field_validator("birth", "survival", mode="before")
     @classmethod
-    def _coerce_count_set(cls, v: Any) -> set[int]:
+    def _coerce_count_set(cls, v: Iterable) -> set[int]:
         if isinstance(v, (set, frozenset, list, tuple)):
             result: set[int] = set()
             for item in v:
@@ -181,7 +195,16 @@ class GenerationsSpec(BaseAutomatonSpec):
 
 
 class LangtonSpec(BaseAutomatonSpec):
-    """Langton's Ant / multi-color turmite automaton specification."""
+    """Langton's Ant / multi-color turmite automaton specification.
+
+    Each step, every agent on the grid:
+    1. Reads the current cell state `c` in [0, num_states - 1].
+    2. Rotates according to `turn_rules[c]` ('R'=90 deg CW, 'L'=90 deg CCW,
+       'N'=no turn, 'U'=180 deg).
+    3. Advances the cell state to `(c + 1) % num_states`.
+    4. Moves one cell forward in its new direction, applying `border_policy`
+       ('wrap', 'halt', or 'bounce') if the move crosses the grid boundary.
+    """
 
     kind: Literal["langton"] = "langton"
     name: str = "Langton's Ant"
@@ -204,7 +227,7 @@ class LangtonSpec(BaseAutomatonSpec):
 
     @field_validator("turn_rules", mode="before")
     @classmethod
-    def _validate_turn_rules(cls, v: Any) -> str:
+    def _validate_turn_rules(cls, v: str) -> str:
         if not isinstance(v, str):
             raise ValueError("turn_rules must be a string")
         normalized = v.strip().upper()
@@ -254,7 +277,14 @@ class LangtonSpec(BaseAutomatonSpec):
 
 
 class ForestFireSpec(BaseAutomatonSpec):
-    """Drossel-Schwabl 2D Forest Fire automaton specification."""
+    """Drossel-Schwabl 2D Forest Fire automaton specification.
+
+    States:
+    - 0 (EMPTY): Transitions to 1 (TREE) with probability `p_growth` (p).
+    - 1 (TREE): Transitions to 2 (FIRE) if at least `min_fire_neighbors`
+      neighbors are in state 2, or stochastically with probability `p_lightning` (q).
+    - 2 (FIRE): Transitions unconditionally to 0 (EMPTY) on the next step.
+    """
 
     kind: Literal["forest_fire"] = "forest_fire"
     name: str = "Forest Fire"

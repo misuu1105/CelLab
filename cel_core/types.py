@@ -70,9 +70,9 @@ class WorldState:
     """Complete snapshot of a 2D cellular automaton at a discrete time step."""
 
     grid: np.ndarray
-    agents: list[Agent] = field(default_factory=list)
+    agents: list[Agent] = field(default_factory=list) # so every instance of the class gets its own list
     step: int = 0
-    rng_state: dict[str, Any] | None = None
+    rng_state: dict[str, Any] | None = None # so we can rewind in stochastic automatons
     halted: bool = False
 
     def __post_init__(self) -> None:

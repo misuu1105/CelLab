@@ -140,6 +140,15 @@ class TestCycleTracker(unittest.TestCase):
         self.assertTrue(t.exhausted)
         self.assertFalse(t.has_cycle)
 
+    def test_ignores_duplicate_same_step_observation(self) -> None:
+        t = CycleTracker()
+        self.assertFalse(t.observe(b"a", 0))
+        self.assertFalse(t.observe(b"a", 0))
+        self.assertFalse(t.has_cycle)
+        self.assertIsNone(t.period)
+        self.assertTrue(t.observe(b"a", 1))
+        self.assertEqual((t.transient, t.period), (0, 1))
+
 
 class TestKnownPeriods(unittest.TestCase):
     CASES = [

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from cel_core.hashing import state_key
@@ -31,7 +32,7 @@ class CycleTracker:
 
     @property
     def has_cycle(self) -> bool:
-        return self.period is not None
+        return self.period is not None and self.period > 0
 
     @property
     def active(self) -> bool:
@@ -47,6 +48,8 @@ class CycleTracker:
             return False
         first = self._seen.get(key)
         if first is not None:
+            if step <= first:
+                return False
             self.transient = first
             self.period = step - first
             self._seen.clear()
@@ -82,6 +85,7 @@ class SimulationEngine:
         self.stochastic = self.rule.is_stochastic
         self.store_history = store_history
         self.tracker = CycleTracker(max_tracked_states)
+        self._lock = threading.RLock()
 
         self._initial = initial_state.copy()
         self._origin = self._initial.step
@@ -133,14 +137,19 @@ class SimulationEngine:
         if not self.tracker.active:
             return
         closed = self.tracker.observe(state_key(state, self.stochastic), state.step)
-        if self.store_history and (closed or self.tracker.active):
+        if (
+            self.store_history
+            and (closed or self.tracker.active)
+            and state.step - self._origin == len(self._history)
+        ):
             self._history.append(state)
 
     def step(self) -> WorldState:
         """Advance one step and return a copy of the new current state."""
-        self._current = self.rule.step(self._current)
-        self._record(self._current)
-        return self._current.copy()
+        with self._lock:
+            self._current = self.rule.step(self._current)
+            self._record(self._current)
+            return self._current.copy()
 
     def run(self, n: int) -> WorldState:
         """Advance `n` steps and return a copy of the resulting state.
@@ -150,14 +159,15 @@ class SimulationEngine:
         """
         if isinstance(n, bool) or not isinstance(n, int) or n < 0:
             raise ValueError(f"n must be a non-negative integer, got {n!r}")
-        target = self._current.step + n
-        while self._current.step < target:
-            if self.tracker.has_cycle:
-                self._current = self._cycle_state(target)
-                break
-            self._current = self.rule.step(self._current)
-            self._record(self._current)
-        return self._current.copy()
+        with self._lock:
+            target = self._current.step + n
+            while self._current.step < target:
+                if self.tracker.has_cycle:
+                    self._current = self._cycle_state(target)
+                    break
+                self._current = self.rule.step(self._current)
+                self._record(self._current)
+            return self._current.copy()
 
     def state_at(self, n: int) -> WorldState:
         """Return the state at absolute step `n`.
@@ -168,27 +178,29 @@ class SimulationEngine:
         """
         if isinstance(n, bool) or not isinstance(n, int) or n < self._origin:
             raise ValueError(f"n must be an integer >= {self._origin}, got {n!r}")
-        cur = self._current.step
-        if n == cur:
-            return self._current.copy()
-        idx = n - self._origin
-        if idx < len(self._history):
-            return self._history[idx].copy()
-        if self.tracker.has_cycle and n >= self.tracker.transient:
-            return self._cycle_state(n)
-        if n > cur:
-            return self.run(n - cur)
-        return self._replay(n)
+        with self._lock:
+            cur = self._current.step
+            if n == cur:
+                return self._current.copy()
+            idx = n - self._origin
+            if idx < len(self._history):
+                return self._history[idx].copy()
+            if self.tracker.has_cycle and n >= self.tracker.transient:
+                return self._cycle_state(n)
+            if n > cur:
+                return self.run(n - cur)
+            return self._replay(n)
 
     # ----------------------------------------------------------- fast-forward
 
     def _cycle_state(self, n: int) -> WorldState:
         """State at step `n` >= T using the detected (T, L)."""
         t, period = self.tracker.transient, self.tracker.period
-        assert t is not None and period is not None and n >= t
-        if self.store_history:
-            phase_step = t + (n - t) % period
-            out = self._history[phase_step - self._origin].copy()
+        assert t is not None and period is not None and period > 0 and n >= t
+        phase_step = t + (n - t) % period
+        hist_idx = phase_step - self._origin
+        if self.store_history and 0 <= hist_idx < len(self._history):
+            out = self._history[hist_idx].copy()
         else:
             # The current step c satisfies c >= T, so S_n = S_{c + ((n - c) mod L)}.
             out = self._current

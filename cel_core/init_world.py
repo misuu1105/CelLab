@@ -41,7 +41,7 @@ class Preset:
 
     name: str
     cells: np.ndarray
-    agents: tuple[Agent, ...] = field(default_factory=tuple)
+    agents: tuple[Agent, ...] = ()
     description: str = ""
 
     @property
@@ -276,4 +276,3 @@ __all__ = [
     "random_grid",
     "stamp",
 ]
-

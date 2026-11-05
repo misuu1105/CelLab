@@ -10,8 +10,8 @@ import numpy as np
 
 from cel_core.types import WorldState
 
-# Grids with at most this many cells use the raw payload as the key; larger
-# grids use a 16-byte BLAKE2b digest of the payload.
+# Grids with at most this many cells use the raw payload as the key
+# larger grids use a 16-byte BLAKE2b digest of the payload.
 RAW_KEY_MAX_CELLS = 65536
 DIGEST_SIZE = 16
 
